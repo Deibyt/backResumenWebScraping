@@ -18,22 +18,26 @@ class ReviewList(APIView):
         # Borrar todos los registros
         Review.objects.all().delete()
 
+       # Reiniciar el contador de IDs en la tabla reviews_review
         with connection.cursor() as cursor:
             cursor.execute("DELETE FROM sqlite_sequence WHERE name='reviews_review'")
 
-        # Hacer el web scraping
+        # Definir las URLs para hacer web scraping de diferentes modelos de autos
         urls = {
             'chevrolet-sail': 'https://www.opinautos.com/co/chevrolet/sail/opiniones',
             'toyota-hilux': 'https://www.opinautos.com/co/toyota/hilux/opiniones',
             'volkswagen-gol': 'https://www.opinautos.com/co/volkswagen/gol/opiniones'
         }
 
+        # Realizar scraping para cada URL definida
         for modelo, website in urls.items():
             resultado = requests.get(website)
             soup = BeautifulSoup(resultado.text, 'html.parser')
             reviews = soup.find_all("div", class_="WhiteCard margin-top desktop-margin15 js-review")
 
+            # Extraer y procesar información de cada reseña encontrada
             for review in reviews:
+                # Obtener la calificación en estrellas de la reseña
                 left_right_box = review.find("div", class_="LeftRightBox__left LeftRightBox__left--noshrink")
                 star_count = 0
                 if left_right_box:
@@ -42,6 +46,7 @@ class ReviewList(APIView):
                         icons = align_middle.find_all("img", class_="Icon")
                         star_count += sum(1 for icon in icons if icon.get("src") == "https://static.opinautos.com/images/design2/icons/icon_star--gold.svg?v=5eb58b")
 
+                # Obtener la cantidad de votos negativos o positivos de la reseña
                 vote_count_neg = review.find("span", class_="VoteCount--neg VoteCount js-comment-votes inline-block")
                 vote_count_pos = review.find("span", class_="VoteCount--pos VoteCount js-comment-votes inline-block")
                 if vote_count_neg:
@@ -51,6 +56,7 @@ class ReviewList(APIView):
                 else:
                     vote_value = 0
 
+                # Obtener la referencia, modelo y especificaciones técnicas del vehículo
                 model_trim = review.find("div", class_="ModelTrim")
                 make_logo_img = model_trim.find("img", class_="MakeLogo__img") if model_trim else None
                 make_title = make_logo_img.get("title") if make_logo_img else "No title"
@@ -61,6 +67,7 @@ class ReviewList(APIView):
                 modelo = match.group(2) if match.group(2) else "Sin modelo"
                 especificaciones_tecnicas = match.group(3) if match.group(3) else "Sin especificaciones tecnicas"
 
+                # Obtener el autor y el país del autor de la reseña
                 author_short = review.find("div", class_="AuthorShort AuthorShort--right margin-top-small")
                 autor = author_short.find("a", class_="gen-avatar").get("title") if author_short else "No autor"
 
@@ -73,10 +80,12 @@ class ReviewList(APIView):
                 else:
                     pais = "No país"
 
+                # Obtener la fecha de la reseña
                 fecha_span = review.find("span", class_="fecha")
                 fecha_completa = fecha_span.get("title") if fecha_span else "No fecha"
                 fecha = fecha_completa[:10] if fecha_completa != "No fecha" else "No fecha"
 
+                # Obtener las opiniones sin definir, positivas y negativas de la reseña
                 opinion_sin_definir = ""
                 opinion_positiva = ""
                 opinion_negativa = ""
@@ -94,6 +103,7 @@ class ReviewList(APIView):
                         else:
                             opinion_sin_definir = text_content
 
+                # Guardar la reseña procesada en la base de datos
                 review_instance = Review(
                     modelo=modelo,
                     calificacion=star_count,
@@ -188,7 +198,7 @@ class BaseReviewSummaryView(APIView):
             "promedio_calificaciones": promedio_calificaciones
         })
 
-
+# Envia los parametros necesarios a la clase padre de cada marca para las opiniones positivas
 class PositiveChevroletReviews(BaseReviewSummaryView):
     brand_name = 'chevrolet'
     type_opinion = 'opinion_positiva'
@@ -204,6 +214,7 @@ class PositiveVolkswagenReviews(BaseReviewSummaryView):
     type_opinion = 'opinion_positiva'
     fixed_reference = 'Volkswagen Gol'
 
+# Envia los parametros necesarios a la clase padre de cada marca para las opiniones negativas
 class NegativeChevroletReviews(BaseReviewSummaryView):
     brand_name = 'chevrolet'
     type_opinion = 'opinion_negativa'
@@ -219,6 +230,7 @@ class NegativeVolkswagenReviews(BaseReviewSummaryView):
     type_opinion = 'opinion_negativa'
     fixed_reference = 'Volkswagen Gol'
 
+# Envia los parametros necesarios a la clase padre de cada marca para las opiniones sin definir (No implementado)
 class NonSpecificChevroletReviews(BaseReviewSummaryView):
     brand_name = 'chevrolet'
     type_opinion = 'opinion_sin_definir'
@@ -234,6 +246,7 @@ class NonSpecificVolkswagenReviews(BaseReviewSummaryView):
     type_opinion = 'opinion_sin_definir'
     fixed_reference = 'Volkswagen Gol'
 
+#Envia los registros correspondientes a la marca chevrolet
 class chevroletReviews(APIView):
     def get(self, request, format=None):
         chevrolet_reviews = Review.objects.filter(marca__icontains='chevrolet')
